@@ -15,6 +15,29 @@ from transformers.processing_utils import Unpack
 from .sa_kv import SA_KV
 
 
+def _write_back_cache(
+    past_key_values: Cache,
+    layer_idx: int,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+) -> None:
+    if hasattr(past_key_values, "key_cache") and hasattr(past_key_values, "value_cache"):
+        past_key_values.key_cache[layer_idx] = key_states
+        past_key_values.value_cache[layer_idx] = value_states
+        return
+
+    if hasattr(past_key_values, "layers") and layer_idx < len(past_key_values.layers):
+        layer_cache = past_key_values.layers[layer_idx]
+        if hasattr(layer_cache, "keys") and hasattr(layer_cache, "values"):
+            layer_cache.keys = key_states
+            layer_cache.values = value_states
+            return
+
+    raise AttributeError(
+        f"Unsupported cache object for FlashVLM patch: {type(past_key_values).__name__}",
+    )
+
+
 def Qwen3VLTextAttention_forward(
     self: Qwen3VLTextAttention,
     hidden_states: torch.Tensor,
@@ -44,8 +67,12 @@ def Qwen3VLTextAttention_forward(
                 query_states=query_states,
                 value_states=value_states,
             )
-            past_key_values.key_cache[self.layer_idx] = key_states
-            past_key_values.value_cache[self.layer_idx] = value_states
+            _write_back_cache(
+                past_key_values=past_key_values,
+                layer_idx=self.layer_idx,
+                key_states=key_states,
+                value_states=value_states,
+            )
 
     attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
         self.config._attn_implementation,
@@ -95,4 +122,3 @@ def apply_flashvlm_attention_patch(
         patched_layers += 1
 
     return patched_layers
-
