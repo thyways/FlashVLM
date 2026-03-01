@@ -1,0 +1,25 @@
+# FlashVLM
+
+## Installation
+
+In this project, we use `uv` for package management.
+
+1. **Clone this repository and navigate to the FlashVLM folder:**
+
+```bash
+git clone https://github.com/thyways/FlashVLM.git
+cd FlashVLM
+cd lmms-eval
+```
+
+2. **Install the lmms-eval package (recommended):**
+
+```bash
+uv pip install -e ".[all]"
+```
+
+3. **Install LLaVA-NeXT:**
+
+```bash
+uv pip install git+https://github.com/LLaVA-VL/LLaVA-NeXT.git
+```
