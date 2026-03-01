@@ -48,9 +48,15 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
 
     def __init__(self, config):
         # super(Qwen2ForCausalLM, self).__init__(config)
-        Qwen2ForCausalLM.__init__(self, config)
         config.model_type = "llava_qwen"
         config.rope_scaling = None
+        # Fix for transformers 5.x: rope_parameters is required by Qwen2RotaryEmbedding.
+        # Older checkpoints (e.g. llava-onevision) may not have this field.
+        if getattr(config, "rope_parameters", None) is None:
+            rope_theta = getattr(config, "rope_theta", 1000000.0)
+            config.rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
+
+        Qwen2ForCausalLM.__init__(self, config)
 
         self.model = LlavaQwenModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

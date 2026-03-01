@@ -5,6 +5,9 @@ readme = "README.md"
 license = { text = "MIT" }
 description = "FlashVLM - llava package for multimodal evaluation"
 requires-python = ">=3.10"
+dependencies = [
+    "transformers==5.2.0",
+]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
