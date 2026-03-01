@@ -565,7 +565,17 @@ class SigLipVisionTower(nn.Module):
             rank0_print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
             return
 
-        self.vision_tower = SigLipVisionModel.from_pretrained(self.vision_tower_name, device_map=device_map)
+        try:
+            self.vision_tower = SigLipVisionModel.from_pretrained(self.vision_tower_name, device_map=device_map)
+        except RuntimeError as e:
+            if "meta device" in str(e) or "meta" in str(e).lower():
+                # In meta device context (transformers >= 5.x with low_cpu_mem_usage=True),
+                # from_pretrained is not allowed. Create architecture only;
+                # weights will be loaded by the outer from_pretrained from checkpoint.
+                rank0_print("Meta device context detected, creating vision tower architecture only.")
+                self.vision_tower = SigLipVisionModel(SigLipVisionConfig())
+            else:
+                raise
 
         del self.vision_tower.vision_model.encoder.layers[-1:]
         self.vision_tower.vision_model.head = nn.Identity()
