@@ -1,4 +1,7 @@
 import re
+import os
+import sys
+from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import decord
@@ -82,6 +85,38 @@ class Qwen3_VL(lmms):
         match = re.search(r"A\d+B", pretrained)
         model_fn = Qwen3VLMoeForConditionalGeneration if match else Qwen3VLForConditionalGeneration
         self._model = model_fn.from_pretrained(pretrained, **model_kwargs).eval()
+
+        compressor = os.getenv("COMPRESSOR")
+        if compressor == "flashvlm":
+            try:
+                from method.flashvlm import apply_flashvlm_attention_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.flashvlm import apply_flashvlm_attention_patch
+
+            budget = int(os.getenv("FLASHVLM_BUDGET", "4096"))
+            window_size = int(os.getenv("FLASHVLM_WINDOW_SIZE", "8"))
+            kernel_size = int(os.getenv("FLASHVLM_KERNEL_SIZE", "7"))
+            mix_lambda = float(os.getenv("FLASHVLM_MIX_LAMBDA", "0.07"))
+            retain_ratio = float(os.getenv("FLASHVLM_RETAIN_RATIO", "0.1"))
+            retain_direction = os.getenv("FLASHVLM_RETAIN_DIRECTION", "last")
+
+            patched_layers = apply_flashvlm_attention_patch(
+                self._model,
+                budget=budget,
+                window_size=window_size,
+                kernel_size=kernel_size,
+                mix_lambda=mix_lambda,
+                retain_ratio=retain_ratio,
+                retain_direction=retain_direction,
+            )
+            eval_logger.success(
+                f"[FlashVLM] Patched {patched_layers} layers "
+                f"(budget={budget}, window={window_size}, kernel={kernel_size}, "
+                f"mix_lambda={mix_lambda}, retain_ratio={retain_ratio}, direction={retain_direction})."
+            )
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
         self.max_num_frames = max_num_frames
