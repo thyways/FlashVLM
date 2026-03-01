@@ -1,7 +1,4 @@
 #!/bin/bash
-
-export CUDA_VISIBLE_DEVICES=0
-
 export HF_HOME="${HOME}/.cache/huggingface"
 export HF_HUB_OFFLINE=1
 
@@ -24,7 +21,7 @@ for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     accelerate launch \
     --main_process_port 12346 \
-    --num_processes 1 \
+    --num_processes 8 \
     -m lmms_eval \
     --model qwen2_5_vl \
     --model_args $MODEL_ARGS \
