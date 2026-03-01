@@ -1,3 +1,4 @@
+#!/bin/bash
 export HF_HOME="${HOME}/.cache/huggingface"
 export HF_HUB_OFFLINE=1
 
