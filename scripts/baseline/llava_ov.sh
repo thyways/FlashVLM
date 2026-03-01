@@ -13,7 +13,8 @@ MAX_FRAMES_NUM=32
 CONV_TEMPLATE=qwen_1_5
 MM_SPATIAL_POOL_MODE=bilinear
 ATTN_IMPLEMENTATION=flash_attention_2
-BASE_MODEL_ARGS="pretrained=$PRETRAINED,conv_template=$CONV_TEMPLATE,mm_spatial_pool_mode=$MM_SPATIAL_POOL_MODE,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION"
+MODEL_NAME=llava_qwen 
+BASE_MODEL_ARGS="pretrained=$PRETRAINED,conv_template=$CONV_TEMPLATE,mm_spatial_pool_mode=$MM_SPATIAL_POOL_MODE,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION,model_name=$MODEL_NAME"
 
 MODEL_ARGS="$BASE_MODEL_ARGS"
 for task in "${TASKS[@]}"; do
