@@ -5,6 +5,7 @@ Summary: FlashVLM - llava package for multimodal evaluation
 License: MIT
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+Requires-Dist: transformers==5.2.0
 
 # FlashVLM
 
