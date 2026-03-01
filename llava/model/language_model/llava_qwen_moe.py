@@ -48,14 +48,9 @@ class LlavaQwenMoeForCausalLM(Qwen2MoeForCausalLM, LlavaMetaForCausalLM):
 
     def __init__(self, config):
         # super(Qwen2MoeForCausalLM, self).__init__(config)
+        Qwen2MoeForCausalLM.__init__(self, config)
         config.model_type = "llava_qwen_moe"
         config.rope_scaling = None
-        # Fix for transformers 5.x: rope_parameters is required by Qwen2RotaryEmbedding.
-        if getattr(config, "rope_parameters", None) is None:
-            rope_theta = getattr(config, "rope_theta", 1000000.0)
-            config.rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
-
-        Qwen2MoeForCausalLM.__init__(self, config)
 
         self.model = LlavaQwenMoeModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
