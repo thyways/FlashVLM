@@ -50,6 +50,10 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
         # super(Qwen2ForCausalLM, self).__init__(config)
         Qwen2ForCausalLM.__init__(self, config)
 
+        # Delay vision tower loading to avoid nested from_pretrained
+        # under meta device context in transformers >= 5.x.
+        # Vision tower will be loaded later in builder.py via load_model().
+        config.delay_load = True
         self.model = LlavaQwenModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
