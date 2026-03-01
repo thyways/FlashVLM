@@ -1,6 +1,6 @@
 # FlashVLM
 
-## Installation
+## 📦Installation
 
 In this project, we use `uv` for package management.
 
