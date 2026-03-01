@@ -49,11 +49,13 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
     def __init__(self, config):
         # super(Qwen2ForCausalLM, self).__init__(config)
         Qwen2ForCausalLM.__init__(self, config)
-        config.model_type = "llava_qwen"
-        config.rope_scaling = None
 
         self.model = LlavaQwenModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Set after model creation to avoid breaking rope_parameters in transformers >= 5.x
+        config.model_type = "llava_qwen"
+        config.rope_scaling = None
         # Initialize weights and apply final processing
         self.post_init()
 
