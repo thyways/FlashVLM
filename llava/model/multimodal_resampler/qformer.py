@@ -44,7 +44,6 @@ from transformers.modeling_utils import (
 )
 from transformers.pytorch_utils import (
     apply_chunking_to_forward, 
-    find_pruneable_heads_and_indices, 
     prune_linear_layer
  ) # change modeling_utils to pytorch_utils
 from transformers.utils import logging
