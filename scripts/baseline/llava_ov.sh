@@ -24,8 +24,8 @@ for task in "${TASKS[@]}"; do
     --model llava_hf \
     --model_args "$MODEL_ARGS" \
     --tasks "$task" \
-    --batch_size "1 \
+    --batch_size 1 \
     --log_samples \
     --log_samples_suffix "llava_ov" \
-    --output_path ./logs/baseline
+    --output_path ./logs/baseline 
 done
