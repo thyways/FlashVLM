@@ -1,0 +1,31 @@
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export HF_HOME="${HOME}/.cache/huggingface"
+export HF_HUB_OFFLINE=1
+
+# Evaluation benchmarks. ("videomme" "egoschema" "mvbench" "longvideobench_val_v" "mlvu_test")
+TASKS=("videomme")
+
+# Pretrained model path.
+PRETRAINED="lmms-lab/llava-onevision-qwen2-7b-ov"
+
+# Model arguments for llava_hf.
+MAX_FRAMES_NUM=32
+ATTN_IMPLEMENTATION=flash_attention_2
+BASE_MODEL_ARGS="pretrained=$PRETRAINED,device_map=auto,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION"
+
+MODEL_ARGS="$BASE_MODEL_ARGS"
+for task in "${TASKS[@]}"; do
+    echo "Evaluating task: $task"
+    accelerate launch \
+    --main_process_port 12346\
+    --num_processes 8 \
+    -m lmms_eval \
+    --model llava_hf \
+    --model_args "$MODEL_ARGS" \
+    --tasks "$task" \
+    --batch_size "1 \
+    --log_samples \
+    --log_samples_suffix "llava_ov" \
+    --output_path ./logs/baseline
+done
