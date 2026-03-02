@@ -439,6 +439,79 @@ def _prune_kv_cache(cache: Cache, keep_indices: Tensor, num_layers: int):
             cache.value_cache[layer_idx] = cache.value_cache[layer_idx][:, :, keep_indices, :]
 
 
+def _prepare_inputs_for_generation_with_fastv_sync(
+    self,
+    input_ids,
+    past_key_values=None,
+    attention_mask=None,
+    inputs_embeds=None,
+    cache_position=None,
+    position_ids=None,
+    use_cache=True,
+    pixel_values=None,
+    pixel_values_videos=None,
+    image_grid_thw=None,
+    video_grid_thw=None,
+    is_first_iteration=False,
+    **kwargs,
+):
+    """
+    Keep generation-time cache metadata aligned with FastV-pruned KV cache.
+
+    After prefill pruning, the KV cache length no longer matches the original prompt
+    length. Hugging Face generation still advances `cache_position` and
+    `attention_mask` from the unpruned prompt length, which can create a larger-than-KV
+    causal mask and trigger shape mismatch in attention.
+    """
+    model_inputs = self._fastv_original_prepare_inputs_for_generation(
+        input_ids=input_ids,
+        past_key_values=past_key_values,
+        attention_mask=attention_mask,
+        inputs_embeds=inputs_embeds,
+        cache_position=cache_position,
+        position_ids=position_ids,
+        use_cache=use_cache,
+        pixel_values=pixel_values,
+        pixel_values_videos=pixel_values_videos,
+        image_grid_thw=image_grid_thw,
+        video_grid_thw=video_grid_thw,
+        is_first_iteration=is_first_iteration,
+        **kwargs,
+    )
+
+    if use_cache and past_key_values is not None:
+        past_len = past_key_values.get_seq_length()
+
+        current_input_ids = model_inputs.get("input_ids", None)
+        current_inputs_embeds = model_inputs.get("inputs_embeds", None)
+        if current_input_ids is not None:
+            current_len = current_input_ids.shape[1]
+            cache_device = current_input_ids.device
+        elif current_inputs_embeds is not None:
+            current_len = current_inputs_embeds.shape[1]
+            cache_device = current_inputs_embeds.device
+        else:
+            current_len = 1
+            cache_device = model_inputs["cache_position"].device
+
+        model_inputs["cache_position"] = torch.arange(
+            past_len,
+            past_len + current_len,
+            device=cache_device,
+            dtype=torch.long,
+        )
+
+        attn_mask = model_inputs.get("attention_mask", None)
+        if attn_mask is not None and attn_mask.ndim == 2:
+            model_inputs["attention_mask"] = torch.ones(
+                (attn_mask.shape[0], past_len + current_len),
+                device=attn_mask.device,
+                dtype=attn_mask.dtype,
+            )
+
+    return model_inputs
+
+
 def apply_fastv_patch(
     model,
     layer_k: int = 2,
@@ -453,4 +526,10 @@ def apply_fastv_patch(
         "retention_ratio": float(retention_ratio),
     }
     qwen3_vl_model.forward = types.MethodType(Qwen3VLModel_forward, qwen3_vl_model)
+
+    if not hasattr(model, "_fastv_original_prepare_inputs_for_generation"):
+        model._fastv_original_prepare_inputs_for_generation = model.prepare_inputs_for_generation
+    model.prepare_inputs_for_generation = types.MethodType(
+        _prepare_inputs_for_generation_with_fastv_sync, model
+    )
     return True
