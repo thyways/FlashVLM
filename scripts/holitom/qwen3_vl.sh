@@ -17,7 +17,7 @@ MODEL_ARGS="$BASE_MODEL_ARGS,interleave_visuals=False"
 for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     COMPRESSOR=holitom \
-    HOLITOM_R_RATIO=0.15 \
+    HOLITOM_R_RATIO=0.2 \
     HOLITOM_T=0.8 \
     HOLITOM_BETA=0.6 \
     HOLITOM_D=0.0 \

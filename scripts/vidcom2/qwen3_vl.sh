@@ -17,7 +17,7 @@ MODEL_ARGS="$BASE_MODEL_ARGS,interleave_visuals=False"
 for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     COMPRESSOR=vidcom2 \
-    VIDCOM2_R_RATIO=0.25 \
+    VIDCOM2_R_RATIO=0.2 \
     accelerate launch \
     --main_process_port 12346 \
     --num_processes 8 \

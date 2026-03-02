@@ -18,7 +18,7 @@ for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     COMPRESSOR=fastv \
     FASTV_K=2 \
-    FASTV_R_RATIO=0.5 \
+    FASTV_R_RATIO=0.2 \
     accelerate launch \
     --main_process_port 12346 \
     --num_processes 8 \
