@@ -9,7 +9,7 @@ TASKS=("videomme")
 PRETRAINED="Qwen/Qwen3-VL-8B-Instruct"
 
 # Model arguments.
-MAX_NUM_FRAMES=16
+MAX_NUM_FRAMES=32
 # Configurable pixel constraints.
 MIN_PIXELS=65536 # 64*32*32
 MAX_PIXELS=262144 # 256*32*32
