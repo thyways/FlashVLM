@@ -7,17 +7,15 @@ TASKS=("videomme")
 PRETRAINED="Qwen/Qwen3-VL-8B-Instruct"
 
 MAX_NUM_FRAMES=32
-MIN_PIXELS=65536
-MAX_PIXELS=262144
 ATTN_IMPLEMENTATION=flash_attention_2
 
-BASE_MODEL_ARGS="pretrained=$PRETRAINED,max_num_frames=$MAX_NUM_FRAMES,max_pixels=$MAX_PIXELS,min_pixels=$MIN_PIXELS,attn_implementation=$ATTN_IMPLEMENTATION"
+BASE_MODEL_ARGS="pretrained=$PRETRAINED,max_num_frames=$MAX_NUM_FRAMES,attn_implementation=$ATTN_IMPLEMENTATION"
 MODEL_ARGS="$BASE_MODEL_ARGS,interleave_visuals=False"
 
 for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     COMPRESSOR=holitom \
-    HOLITOM_R_RATIO=0.2 \
+    R_RATIO=0.25 \
     HOLITOM_T=0.8 \
     HOLITOM_BETA=0.6 \
     HOLITOM_D=0.0 \

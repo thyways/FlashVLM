@@ -263,7 +263,7 @@ def _fastv_text_model_forward(
     # Create causal mask
     causal_mask = create_causal_mask(
         config=lm.config,
-        input_embeds=inputs_embeds,
+        inputs_embeds=inputs_embeds,
         attention_mask=attention_mask,
         cache_position=cache_position,
         past_key_values=past_key_values,
@@ -346,14 +346,18 @@ def _fastv_text_model_forward(
                 # Prune mrope_position_ids
                 mrope_position_ids = mrope_position_ids[:, :, keep_indices]
                 
-                # Update cache_position
+                # Remap to a compact cache index space after pruning.
+                # Sparse cache_position (original token indices) can inflate mask target length
+                # on newer transformers and cause attn/mask shape mismatch.
                 if cache_position is not None:
-                    cache_position = cache_position[keep_indices]
+                    cache_position = torch.arange(
+                        hidden_states.shape[1], device=hidden_states.device, dtype=cache_position.dtype
+                    )
                 
                 # Recreate causal mask for pruned sequence
                 causal_mask = create_causal_mask(
                     config=lm.config,
-                    input_embeds=hidden_states,
+                    inputs_embeds=hidden_states,
                     attention_mask=None,
                     cache_position=cache_position,
                     past_key_values=past_key_values,

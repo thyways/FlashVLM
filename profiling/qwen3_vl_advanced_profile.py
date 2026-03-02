@@ -4,11 +4,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 import json
+import os
 import sys
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import decord
 import torch
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from transformers.hf_argparser import HfArgumentParser
@@ -16,11 +16,6 @@ from transformers.hf_argparser import HfArgumentParser
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
-
-try:
-    from qwen_vl_utils import process_vision_info
-except ImportError as exc:  # pragma: no cover - runtime dependency
-    raise ImportError("请先安装 qwen-vl-utils: pip install qwen-vl-utils") from exc
 
 
 @dataclass
@@ -35,6 +30,10 @@ class ProfileArguments:
     max_pixels: int = field(default=256 * 28 * 28)
     attn_implementation: str = field(default="flash_attention_2")
     report_path: str = field(default="")
+    # 控制 qwen_vl_utils 视频解码后端：auto/decord/torchvision/torchcodec
+    qwen_video_reader_backend: str = field(default="auto")
+    # 原始视频解码阶段仅用于诊断，默认关闭以降低底层解码库触发崩溃概率
+    skip_raw_decode: bool = field(default=True)
 
     # FlashVLM
     flashvlm_budget: int = field(default=4096)
@@ -124,6 +123,20 @@ class TimingCollector:
     def top(self, n: int = 20) -> List[Tuple[str, Dict[str, float]]]:
         summary = self.summary()
         return sorted(summary.items(), key=lambda item: item[1]["total_ms"], reverse=True)[:n]
+
+
+def normalize_video_kwargs(video_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(video_kwargs, dict):
+        return {}
+
+    normalized = dict(video_kwargs)
+    for key in ("fps", "num_frames"):
+        value = normalized.get(key)
+        if isinstance(value, list):
+            normalized[key] = value[0] if len(value) > 0 else None
+        elif isinstance(value, tuple):
+            normalized[key] = value[0] if len(value) > 0 else None
+    return normalized
 
 
 def _wrap_function(module: Any, fn_name: str, collector: TimingCollector, label: str) -> Optional[Callable[[], None]]:
@@ -394,23 +407,120 @@ def install_model_runtime_hooks(
 
 
 def profile_video_decode(video_path: str, num_frames: int, collector: TimingCollector) -> Dict[str, Any]:
-    info: Dict[str, Any] = {"decoded_frames": 0, "sampled_indices": []}
+    info: Dict[str, Any] = {
+        "decoded_frames": 0,
+        "sampled_indices": [],
+        "status": "not_run",
+    }
+    try:
+        import decord
+    except Exception as exc:  # pragma: no cover - runtime dependency
+        info["status"] = f"skipped: decord_import_failed: {exc}"
+        return info
+
     with collector.time("stage.video_decode_raw"):
-        vr = decord.VideoReader(video_path)
-        total = len(vr)
-        if total <= 0:
-            return info
-        frame_count = min(max(num_frames, 1), total)
-        indices = torch.linspace(0, total - 1, steps=frame_count, dtype=torch.long).tolist()
-        _ = vr.get_batch(indices)
-        info["decoded_frames"] = frame_count
-        info["sampled_indices"] = indices
+        try:
+            vr = decord.VideoReader(video_path)
+            total = len(vr)
+            if total <= 0:
+                info["status"] = "ok_empty_video"
+                return info
+            frame_count = min(max(num_frames, 1), total)
+            indices = torch.linspace(0, total - 1, steps=frame_count, dtype=torch.long).tolist()
+            _ = vr.get_batch(indices)
+            info["decoded_frames"] = frame_count
+            info["sampled_indices"] = indices
+            info["status"] = "ok"
+        except Exception as exc:
+            info["status"] = f"failed: {exc}"
     return info
+
+
+def _resolve_eos_token_ids(model: Qwen3VLForConditionalGeneration) -> List[int]:
+    eos = getattr(model.generation_config, "eos_token_id", None)
+    if eos is None:
+        eos = model.config.eos_token_id
+    if eos is None:
+        return []
+    if isinstance(eos, (list, tuple)):
+        return [int(x) for x in eos]
+    return [int(eos)]
+
+
+@torch.inference_mode()
+def _fastv_greedy_generate(
+    model: Qwen3VLForConditionalGeneration,
+    inputs: Dict[str, torch.Tensor],
+    max_new_tokens: int,
+) -> torch.LongTensor:
+    if max_new_tokens <= 0:
+        return inputs["input_ids"]
+
+    model_inputs = dict(inputs)
+    model_inputs["use_cache"] = True
+    model_inputs["return_dict"] = True
+
+    outputs = model(**model_inputs)
+    past_key_values = outputs.past_key_values
+    next_token = outputs.logits[:, -1:, :].argmax(dim=-1)
+    generated = [inputs["input_ids"], next_token]
+
+    eos_token_ids = _resolve_eos_token_ids(model)
+    eos_tensor = (
+        torch.tensor(eos_token_ids, device=next_token.device, dtype=next_token.dtype)
+        if eos_token_ids
+        else None
+    )
+    if eos_tensor is not None and bool(torch.isin(next_token, eos_tensor).all()):
+        return torch.cat(generated, dim=1)
+
+    for _ in range(max_new_tokens - 1):
+        if past_key_values is None:
+            raise RuntimeError("FastV greedy generation requires KV cache, but past_key_values is None.")
+        past_len = int(past_key_values.get_seq_length())
+        decode_inputs = {
+            "input_ids": next_token,
+            "past_key_values": past_key_values,
+            "use_cache": True,
+            "return_dict": True,
+            "cache_position": torch.tensor([past_len], device=next_token.device, dtype=torch.long),
+            "attention_mask": torch.ones(
+                (next_token.shape[0], past_len + 1),
+                device=next_token.device,
+                dtype=torch.long,
+            ),
+        }
+        outputs = model(**decode_inputs)
+        past_key_values = outputs.past_key_values
+        next_token = outputs.logits[:, -1:, :].argmax(dim=-1)
+        generated.append(next_token)
+
+        if eos_tensor is not None and bool(torch.isin(next_token, eos_tensor).all()):
+            break
+
+    return torch.cat(generated, dim=1)
 
 
 def run_profile(args: ProfileArguments) -> Dict[str, Any]:
     collector = TimingCollector()
     method = args.method.lower().strip()
+    backend = args.qwen_video_reader_backend.strip().lower()
+
+    if backend not in {"auto", "decord", "torchvision", "torchcodec"}:
+        raise ValueError(
+            f"Unsupported qwen_video_reader_backend={args.qwen_video_reader_backend}, "
+            "supported: auto, decord, torchvision, torchcodec"
+        )
+
+    if backend == "auto":
+        os.environ.pop("FORCE_QWENVL_VIDEO_READER", None)
+    else:
+        os.environ["FORCE_QWENVL_VIDEO_READER"] = backend
+
+    try:
+        from qwen_vl_utils import process_vision_info
+    except ImportError as exc:  # pragma: no cover - runtime dependency
+        raise ImportError("请先安装 qwen-vl-utils: pip install qwen-vl-utils") from exc
 
     if method == "fastv" and args.attn_implementation != "eager":
         print("[Info] FastV 依赖 attention weights，自动将 attn_implementation 切换为 eager。")
@@ -441,7 +551,10 @@ def run_profile(args: ProfileArguments) -> Dict[str, Any]:
     }
 
     with collector.time("stage.e2e_total"):
-        report["video_decode_info"] = profile_video_decode(args.video_path, args.num_frames, collector)
+        if args.skip_raw_decode:
+            report["video_decode_info"] = {"status": "skipped_by_arg", "decoded_frames": 0, "sampled_indices": []}
+        else:
+            report["video_decode_info"] = profile_video_decode(args.video_path, args.num_frames, collector)
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -461,6 +574,7 @@ def run_profile(args: ProfileArguments) -> Dict[str, Any]:
 
         with collector.time("stage.qwen_vl_process_vision_info"):
             images, videos, video_kwargs = process_vision_info(messages, return_video_kwargs=True)
+            video_kwargs = normalize_video_kwargs(video_kwargs)
 
         with collector.time("stage.processor_chat_template"):
             text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -482,11 +596,18 @@ def run_profile(args: ProfileArguments) -> Dict[str, Any]:
         report["input_tokens"] = input_tokens
 
         with collector.time("stage.llm_generate_total"):
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=args.max_new_tokens,
-                do_sample=False,
-            )
+            if method == "fastv":
+                generated_ids = _fastv_greedy_generate(
+                    model=model,
+                    inputs=inputs,
+                    max_new_tokens=args.max_new_tokens,
+                )
+            else:
+                generated_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=args.max_new_tokens,
+                    do_sample=False,
+                )
 
         with collector.time("stage.processor_decode_text"):
             generated_text = processor.batch_decode(
@@ -537,6 +658,8 @@ def pretty_print_report(report: Dict[str, Any]) -> None:
     print(f"method              : {report['args']['method']}")
     print(f"model               : {report['args']['model_path']}")
     print(f"video_path          : {report['args']['video_path']}")
+    print(f"qwen_reader_backend : {report['args']['qwen_video_reader_backend']}")
+    print(f"skip_raw_decode     : {report['args']['skip_raw_decode']}")
     print(f"input_tokens        : {report.get('input_tokens')}")
     print(f"generated_tokens    : {report.get('generated_tokens')}")
     print(f"tokens_per_second   : {report.get('throughput', {}).get('tokens_per_second')}")

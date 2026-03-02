@@ -76,6 +76,30 @@ def parse_args() -> InferenceArguments:
     return arguments
 
 
+def normalize_video_kwargs(video_kwargs: dict) -> dict:
+    """
+    transformers>=5 对 processor 的 videos kwargs 做了严格类型校验。
+    qwen_vl_utils 可能返回 fps=[x]，这里规整为标量以兼容新版接口。
+    """
+    if not isinstance(video_kwargs, dict):
+        return {}
+
+    normalized = dict(video_kwargs)
+    for key in ("fps", "num_frames"):
+        value = normalized.get(key)
+        if isinstance(value, list):
+            if len(value) == 0:
+                normalized[key] = None
+            else:
+                normalized[key] = value[0]
+        elif isinstance(value, tuple):
+            if len(value) == 0:
+                normalized[key] = None
+            else:
+                normalized[key] = value[0]
+    return normalized
+
+
 def load_model(args: InferenceArguments):
     attn_impl = args.attn_implementation
     if args.method.lower() == "fastv" and attn_impl != "eager":
@@ -224,6 +248,7 @@ def inference(
     ]
 
     images, videos, video_kwargs = process_vision_info(messages, return_video_kwargs=True)
+    video_kwargs = normalize_video_kwargs(video_kwargs)
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     print("video input:", videos[0].shape)
