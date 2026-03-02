@@ -117,6 +117,54 @@ class Qwen3_VL(lmms):
                 f"(budget={budget}, window={window_size}, kernel={kernel_size}, "
                 f"mix_lambda={mix_lambda}, retain_ratio={retain_ratio}, direction={retain_direction})."
             )
+        elif compressor == "flashvid":
+            try:
+                from method.flashvid import apply_flashvid_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.flashvid import apply_flashvid_patch
+
+            def _as_bool(value: str, default: bool) -> bool:
+                if value is None:
+                    return default
+                return value.strip().lower() in {"1", "true", "yes", "on"}
+
+            retention_ratio = float(os.getenv("FLASHVID_RETENTION_RATIO", "0.25"))
+            do_segment = _as_bool(os.getenv("FLASHVID_DO_SEGMENT"), True)
+            segment_threshold = float(os.getenv("FLASHVID_SEGMENT_THRESHOLD", "0.9"))
+            min_segment_num = int(os.getenv("FLASHVID_MIN_SEGMENT_NUM", "8"))
+            complementary_segment = _as_bool(os.getenv("FLASHVID_COMPLEMENTARY_SEGMENT"), True)
+            token_selection_method = os.getenv("FLASHVID_TOKEN_SELECTION_METHOD", "attn_div")
+            alpha = float(os.getenv("FLASHVID_ALPHA", "0.7"))
+            temporal_threshold = float(os.getenv("FLASHVID_TEMPORAL_THRESHOLD", "0.8"))
+            expansion = float(os.getenv("FLASHVID_EXPANSION", "1.25"))
+            pruning_layer = int(os.getenv("FLASHVID_PRUNING_LAYER", "20"))
+            llm_retention_ratio = float(os.getenv("FLASHVID_LLM_RETENTION_RATIO", "0.3"))
+
+            apply_flashvid_patch(
+                self._model,
+                retention_ratio=retention_ratio,
+                do_segment=do_segment,
+                segment_threshold=segment_threshold,
+                min_segment_num=min_segment_num,
+                complementary_segment=complementary_segment,
+                token_selection_method=token_selection_method,
+                alpha=alpha,
+                temporal_threshold=temporal_threshold,
+                expansion=expansion,
+                pruning_layer=pruning_layer,
+                llm_retention_ratio=llm_retention_ratio,
+            )
+            eval_logger.success(
+                f"[FlashVID] Patched Qwen3-VL "
+                f"(retention_ratio={retention_ratio}, do_segment={do_segment}, "
+                f"segment_threshold={segment_threshold}, min_segment_num={min_segment_num}, "
+                f"complementary_segment={complementary_segment}, token_selection_method={token_selection_method}, "
+                f"alpha={alpha}, temporal_threshold={temporal_threshold}, expansion={expansion}, "
+                f"pruning_layer={pruning_layer}, llm_retention_ratio={llm_retention_ratio})."
+            )
         elif compressor == "vidcom2":
             try:
                 from method.vidcom2 import apply_vidcom2_patch
@@ -215,7 +263,7 @@ class Qwen3_VL(lmms):
         elif compressor is not None:
             eval_logger.warning(
                 f"[Warning] Unknown COMPRESSOR value: {compressor}. "
-                "Supported values: flashvlm, vidcom2, fastv, visionzip, holitom"
+                "Supported values: flashvlm, flashvid, vidcom2, fastv, visionzip, holitom"
             )
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
