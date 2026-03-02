@@ -3,7 +3,7 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export HF_HOME="${HOME}/.cache/huggingface"
 export HF_HUB_OFFLINE=1
 
-TASKS=("videomme" "egoschema" "mvbench" "longvideobench_val_v" "mlvu_test")
+TASKS=("videomme")
 PRETRAINED="Qwen/Qwen3-VL-8B-Instruct"
 RETENTION_RATIOS=0.25
 DO_SEGMENT=true
