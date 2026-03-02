@@ -12,7 +12,8 @@ PRETRAINED="lmms-lab/llava-onevision-qwen2-7b-ov"
 # Model arguments for llava_hf.
 MAX_FRAMES_NUM=32
 ATTN_IMPLEMENTATION=flash_attention_2
-BASE_MODEL_ARGS="pretrained=$PRETRAINED,device_map=auto,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION"
+MODEL_TYPE_OVERRIDE=llava_onevision
+BASE_MODEL_ARGS="pretrained=$PRETRAINED,device_map=auto,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION,model_type_override=$MODEL_TYPE_OVERRIDE"
 
 MODEL_ARGS="$BASE_MODEL_ARGS"
 for task in "${TASKS[@]}"; do

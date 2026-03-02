@@ -74,6 +74,8 @@ class LlavaHf(lmms):
         chat_template: Optional[str] = None,
         use_cache: bool = True,
         max_frames_num: Optional[int] = 32,
+        model_type_override: Optional[str] = None,
+        ignore_mismatched_sizes: bool = False,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -90,11 +92,25 @@ class LlavaHf(lmms):
         if isinstance(dtype, str) and dtype != "auto":
             dtype = getattr(torch, dtype)
 
-        config = AutoConfig.from_pretrained(pretrained)
+        config = AutoConfig.from_pretrained(pretrained, revision=revision, trust_remote_code=trust_remote_code)
         self.max_frames_num = max_frames_num
-        model_type = getattr(config, "model_type", "llava")
-        model_type = model_map[model_type]
-        self._model = model_type.from_pretrained(pretrained, revision=revision, torch_dtype=dtype, device_map=self.device_map, trust_remote_code=trust_remote_code, attn_implementation=attn_implementation)
+        detected_model_type = getattr(config, "model_type", "llava")
+        resolved_model_type = model_type_override if model_type_override is not None else detected_model_type
+        if resolved_model_type not in model_map:
+            raise ValueError(f"Unsupported model_type '{resolved_model_type}'. Available: {sorted(model_map.keys())}")
+        if model_type_override is not None and model_type_override != detected_model_type:
+            eval_logger.warning(f"model_type override enabled: config.model_type={detected_model_type}, override={model_type_override}")
+
+        model_cls = model_map[resolved_model_type]
+        self._model = model_cls.from_pretrained(
+            pretrained,
+            revision=revision,
+            torch_dtype=dtype,
+            device_map=self.device_map,
+            trust_remote_code=trust_remote_code,
+            attn_implementation=attn_implementation,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+        )
 
         self.pretrained = pretrained
         self._image_processor = AutoProcessor.from_pretrained(pretrained, revision=revision, trust_remote_code=trust_remote_code)
