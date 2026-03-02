@@ -117,6 +117,87 @@ class Qwen3_VL(lmms):
                 f"(budget={budget}, window={window_size}, kernel={kernel_size}, "
                 f"mix_lambda={mix_lambda}, retain_ratio={retain_ratio}, direction={retain_direction})."
             )
+        elif compressor == "fastv":
+            try:
+                from method.fastv import apply_fastv_attention_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.fastv import apply_fastv_attention_patch
+
+            layer_k = int(os.getenv("FASTV_K", "2"))
+            retention_ratio = float(os.getenv("FASTV_R_RATIO", os.getenv("R_RATIO", "0.5")))
+
+            apply_fastv_attention_patch(
+                self._model,
+                layer_k=layer_k,
+                retention_ratio=retention_ratio,
+            )
+            eval_logger.success(
+                f"[FastV] Patched Qwen3-VL forward "
+                f"(layer_k={layer_k}, retention_ratio={retention_ratio})."
+            )
+        elif compressor == "visionzip":
+            try:
+                from method.visionzip import apply_visionzip_attention_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.visionzip import apply_visionzip_attention_patch
+
+            retention_ratio = float(os.getenv("VISIONZIP_R_RATIO", os.getenv("R_RATIO", "0.2")))
+            dominant_ratio = float(os.getenv("VISIONZIP_DOMINANT_RATIO", "0.6"))
+            k_neighbors = int(os.getenv("VISIONZIP_K_NEIGHBORS", "5"))
+
+            apply_visionzip_attention_patch(
+                self._model,
+                retention_ratio=retention_ratio,
+                dominant_ratio=dominant_ratio,
+                k_neighbors=k_neighbors,
+            )
+            eval_logger.success(
+                f"[VisionZip] Patched Qwen3-VL forward "
+                f"(retention_ratio={retention_ratio}, dominant_ratio={dominant_ratio}, "
+                f"k_neighbors={k_neighbors})."
+            )
+        elif compressor == "holitom":
+            try:
+                from method.holitom import apply_holitom_attention_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.holitom import apply_holitom_attention_patch
+
+            retain_ratio = float(os.getenv("HOLITOM_R_RATIO", os.getenv("R_RATIO", "0.15")))
+            tau = float(os.getenv("HOLITOM_T", "0.8"))
+            beta = float(os.getenv("HOLITOM_BETA", "0.6"))
+            dominant_ratio = float(os.getenv("HOLITOM_D", "0.0"))
+            k_neighbors = int(os.getenv("HOLITOM_K", "7"))
+            max_window_size = int(os.getenv("HOLITOM_MAX_WINDOW_SIZE", "1024"))
+
+            apply_holitom_attention_patch(
+                self._model,
+                retain_ratio=retain_ratio,
+                tau=tau,
+                beta=beta,
+                dominant_ratio=dominant_ratio,
+                k_neighbors=k_neighbors,
+                max_window_size=max_window_size,
+            )
+            eval_logger.success(
+                f"[HoliTom] Patched Qwen3-VL forward "
+                f"(retain_ratio={retain_ratio}, tau={tau}, beta={beta}, "
+                f"dominant_ratio={dominant_ratio}, k_neighbors={k_neighbors}, "
+                f"max_window_size={max_window_size})."
+            )
+        elif compressor is not None:
+            eval_logger.warning(
+                f"[Warning] Unknown COMPRESSOR value: {compressor}. "
+                "Supported values: flashvlm, fastv, visionzip, holitom"
+            )
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
         self.max_num_frames = max_num_frames
