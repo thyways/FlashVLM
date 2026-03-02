@@ -608,7 +608,7 @@ def Qwen3VLModel_forward(
     )
 
 
-def apply_visionzip_attention_patch(
+def apply_visionzip_patch(
     model,
     retention_ratio: float = 0.2,
     dominant_ratio: float = 0.6,

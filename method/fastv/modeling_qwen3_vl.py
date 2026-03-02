@@ -435,7 +435,7 @@ def _prune_kv_cache(cache: Cache, keep_indices: Tensor, num_layers: int):
             cache.value_cache[layer_idx] = cache.value_cache[layer_idx][:, :, keep_indices, :]
 
 
-def apply_fastv_attention_patch(
+def apply_fastv_patch(
     model,
     layer_k: int = 2,
     retention_ratio: float = 0.5,

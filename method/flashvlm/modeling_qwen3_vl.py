@@ -94,7 +94,7 @@ def Qwen3VLTextAttention_forward(
     return attn_output, attn_weights
 
 
-def apply_flashvlm_attention_patch(
+def apply_flashvlm_patch(
     model,
     budget: int = 4096,
     window_size: int = 8,

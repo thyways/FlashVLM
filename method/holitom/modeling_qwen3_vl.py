@@ -631,7 +631,7 @@ def Qwen3VLModel_forward(
     )
 
 
-def apply_holitom_attention_patch(
+def apply_holitom_patch(
     model,
     retain_ratio: float = 0.15,
     tau: float = 0.8,

@@ -89,12 +89,12 @@ class Qwen3_VL(lmms):
         compressor = os.getenv("COMPRESSOR")
         if compressor == "flashvlm":
             try:
-                from method.flashvlm import apply_flashvlm_attention_patch
+                from method.flashvlm import apply_flashvlm_patch
             except ImportError:
                 project_root = Path(__file__).resolve().parents[4]
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                from method.flashvlm import apply_flashvlm_attention_patch
+                from method.flashvlm import apply_flashvlm_patch
 
             budget = int(os.getenv("FLASHVLM_BUDGET", "4096"))
             window_size = int(os.getenv("FLASHVLM_WINDOW_SIZE", "8"))
@@ -103,7 +103,7 @@ class Qwen3_VL(lmms):
             retain_ratio = float(os.getenv("FLASHVLM_RETAIN_RATIO", "0.1"))
             retain_direction = os.getenv("FLASHVLM_RETAIN_DIRECTION", "last")
 
-            patched_layers = apply_flashvlm_attention_patch(
+            patched_layers = apply_flashvlm_patch(
                 self._model,
                 budget=budget,
                 window_size=window_size,
@@ -117,19 +117,38 @@ class Qwen3_VL(lmms):
                 f"(budget={budget}, window={window_size}, kernel={kernel_size}, "
                 f"mix_lambda={mix_lambda}, retain_ratio={retain_ratio}, direction={retain_direction})."
             )
-        elif compressor == "fastv":
+        elif compressor == "vidcom2":
             try:
-                from method.fastv import apply_fastv_attention_patch
+                from method.vidcom2 import apply_vidcom2_patch
             except ImportError:
                 project_root = Path(__file__).resolve().parents[4]
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                from method.fastv import apply_fastv_attention_patch
+                from method.vidcom2 import apply_vidcom2_patch
+
+            base_scale = float(os.getenv("VIDCOM2_R_RATIO", os.getenv("R_RATIO", "0.25")))
+
+            apply_vidcom2_patch(
+                self._model,
+                base_scale=base_scale,
+            )
+            eval_logger.success(
+                f"[VidCom2] Patched Qwen3-VL forward "
+                f"(base_scale={base_scale})."
+            )
+        elif compressor == "fastv":
+            try:
+                from method.fastv import apply_fastv_patch
+            except ImportError:
+                project_root = Path(__file__).resolve().parents[4]
+                if str(project_root) not in sys.path:
+                    sys.path.append(str(project_root))
+                from method.fastv import apply_fastv_patch
 
             layer_k = int(os.getenv("FASTV_K", "2"))
             retention_ratio = float(os.getenv("FASTV_R_RATIO", os.getenv("R_RATIO", "0.5")))
 
-            apply_fastv_attention_patch(
+            apply_fastv_patch(
                 self._model,
                 layer_k=layer_k,
                 retention_ratio=retention_ratio,
@@ -140,18 +159,18 @@ class Qwen3_VL(lmms):
             )
         elif compressor == "visionzip":
             try:
-                from method.visionzip import apply_visionzip_attention_patch
+                from method.visionzip import apply_visionzip_patch
             except ImportError:
                 project_root = Path(__file__).resolve().parents[4]
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                from method.visionzip import apply_visionzip_attention_patch
+                from method.visionzip import apply_visionzip_patch
 
             retention_ratio = float(os.getenv("VISIONZIP_R_RATIO", os.getenv("R_RATIO", "0.2")))
             dominant_ratio = float(os.getenv("VISIONZIP_DOMINANT_RATIO", "0.6"))
             k_neighbors = int(os.getenv("VISIONZIP_K_NEIGHBORS", "5"))
 
-            apply_visionzip_attention_patch(
+            apply_visionzip_patch(
                 self._model,
                 retention_ratio=retention_ratio,
                 dominant_ratio=dominant_ratio,
@@ -164,12 +183,12 @@ class Qwen3_VL(lmms):
             )
         elif compressor == "holitom":
             try:
-                from method.holitom import apply_holitom_attention_patch
+                from method.holitom import apply_holitom_patch
             except ImportError:
                 project_root = Path(__file__).resolve().parents[4]
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                from method.holitom import apply_holitom_attention_patch
+                from method.holitom import apply_holitom_patch
 
             retain_ratio = float(os.getenv("HOLITOM_R_RATIO", os.getenv("R_RATIO", "0.15")))
             tau = float(os.getenv("HOLITOM_T", "0.8"))
@@ -178,7 +197,7 @@ class Qwen3_VL(lmms):
             k_neighbors = int(os.getenv("HOLITOM_K", "7"))
             max_window_size = int(os.getenv("HOLITOM_MAX_WINDOW_SIZE", "1024"))
 
-            apply_holitom_attention_patch(
+            apply_holitom_patch(
                 self._model,
                 retain_ratio=retain_ratio,
                 tau=tau,
@@ -196,7 +215,7 @@ class Qwen3_VL(lmms):
         elif compressor is not None:
             eval_logger.warning(
                 f"[Warning] Unknown COMPRESSOR value: {compressor}. "
-                "Supported values: flashvlm, fastv, visionzip, holitom"
+                "Supported values: flashvlm, vidcom2, fastv, visionzip, holitom"
             )
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
