@@ -239,7 +239,7 @@ def _fastv_text_model_forward(
     
     # Initialize cache
     if use_cache and past_key_values is None:
-        past_key_values = DynamicCache()
+        past_key_values = DynamicCache(config=lm.config)
     
     # Initialize cache_position if needed
     if cache_position is None:
@@ -275,10 +275,6 @@ def _fastv_text_model_forward(
     # Compute position embeddings (rotary embeddings)
     position_embeddings = lm.rotary_emb(hidden_states, mrope_position_ids)
     
-    # Track compression state
-    compression_applied = False
-    keep_indices = None
-    
     # Process layers one by one
     for layer_idx, decoder_layer in enumerate(lm.layers):
         # Apply deepstack visual embeddings if available
@@ -288,7 +284,7 @@ def _fastv_text_model_forward(
                 hidden_states = _deepstack_process(hidden_states, visual_pos_masks, visual_embeds)
         
         # At layer K, we need to manually call self_attn to get attention weights
-        if layer_idx == layer_k and not compression_applied and video_token_mask.sum() > 0:
+        if layer_idx == layer_k and video_token_mask.sum() > 0:
             # Manually execute decoder layer logic to get attention weights
             residual = hidden_states
             hidden_states = decoder_layer.input_layernorm(hidden_states)
@@ -355,12 +351,17 @@ def _fastv_text_model_forward(
                     )
                 
                 # Recreate causal mask for pruned sequence
+                # NOTE:
+                # We are still in the same prefill pass. At this point, early layers already
+                # wrote full-sequence entries into `past_key_values`, while later layers did not.
+                # Rebuilding the mask with `past_key_values` can over-estimate kv length.
+                # Use a prefill-local mask (without past cache) for the remaining layers.
                 causal_mask = create_causal_mask(
                     config=lm.config,
                     inputs_embeds=hidden_states,
                     attention_mask=None,
                     cache_position=cache_position,
-                    past_key_values=past_key_values,
+                    past_key_values=None,
                     position_ids=text_position_ids,
                 )
                 
@@ -387,7 +388,6 @@ def _fastv_text_model_forward(
                             embeds[kept_visual_mask] for embeds in deepstack_visual_embeds
                         ]
                 
-                compression_applied = True
         else:
             # Normal layer forward - use the standard decoder layer
             hidden_states = decoder_layer(
@@ -429,14 +429,30 @@ def _deepstack_process(
 
 def _prune_kv_cache(cache: Cache, keep_indices: Tensor, num_layers: int):
     """Prune KV cache for the first num_layers layers."""
-    if not hasattr(cache, 'key_cache') or not hasattr(cache, 'value_cache'):
+    # New transformers cache API (DynamicCache with per-layer objects)
+    if hasattr(cache, "layers"):
+        for layer_idx in range(min(num_layers, len(cache.layers))):
+            layer = cache.layers[layer_idx]
+            if (
+                layer is not None
+                and getattr(layer, "is_initialized", False)
+                and hasattr(layer, "keys")
+                and hasattr(layer, "values")
+                and layer.keys is not None
+                and layer.values is not None
+                and layer.keys.numel() > 0
+            ):
+                # keys/values shape: [batch, num_heads, seq_len, head_dim]
+                layer.keys = layer.keys.index_select(-2, keep_indices)
+                layer.values = layer.values.index_select(-2, keep_indices)
         return
-    
-    for layer_idx in range(min(num_layers, len(cache.key_cache))):
-        if cache.key_cache[layer_idx] is not None:
-            # KV cache shape: [batch, num_heads, seq_len, head_dim]
-            cache.key_cache[layer_idx] = cache.key_cache[layer_idx][:, :, keep_indices, :]
-            cache.value_cache[layer_idx] = cache.value_cache[layer_idx][:, :, keep_indices, :]
+
+    # Legacy cache API (key_cache/value_cache lists)
+    if hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
+        for layer_idx in range(min(num_layers, len(cache.key_cache))):
+            if cache.key_cache[layer_idx] is not None:
+                cache.key_cache[layer_idx] = cache.key_cache[layer_idx][:, :, keep_indices, :]
+                cache.value_cache[layer_idx] = cache.value_cache[layer_idx][:, :, keep_indices, :]
 
 
 def _prepare_inputs_for_generation_with_fastv_sync(
