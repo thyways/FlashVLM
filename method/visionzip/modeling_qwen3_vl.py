@@ -391,7 +391,9 @@ def Qwen3VLModel_forward(
     video_attention_scores = None
 
     if pixel_values is not None:
-        image_embeds, deepstack_image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+        image_features = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+        image_embeds = image_features.pooler_output
+        deepstack_image_embeds = image_features.deepstack_features
         image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
         image_mask, _ = self.get_placeholder_mask(
             input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -427,7 +429,9 @@ def Qwen3VLModel_forward(
             video_embeds = torch.cat(video_embeds_list, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
         else:
             # Normal path without compression
-            video_embeds, deepstack_video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_features = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True)
+            video_embeds = video_features.pooler_output
+            deepstack_video_embeds = video_features.deepstack_features
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
         
         # Get video_mask BEFORE compression, using original video_embeds
