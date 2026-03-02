@@ -1,13 +1,13 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export HF_HOME="${HOME}/.cache/huggingface"
-export HF_HUB_OFFLINE=1
+export HF_HUB_OFFLINE=0
 
 # Evaluation benchmarks. ("videomme" "egoschema" "mvbench" "longvideobench_val_v" "mlvu_test")
 TASKS=("videomme")
 
 # Pretrained model path.
-PRETRAINED="lmms-lab/LLaVA-Video-7B-Qwen2"
+PRETRAINED="llava-hf/LLaVA-NeXT-Video-7B-hf"
 
 # Model arguments for llava_hf.
 MAX_FRAMES_NUM=64
@@ -23,6 +23,7 @@ for task in "${TASKS[@]}"; do
     -m lmms_eval \
     --model llava_hf \
     --model_args "$MODEL_ARGS" \
+    --force_simple \
     --tasks "$task" \
     --batch_size 1 \
     --log_samples \

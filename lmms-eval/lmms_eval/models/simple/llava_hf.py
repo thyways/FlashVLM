@@ -42,6 +42,13 @@ try:
 except Exception:
     eval_logger.debug("Transformers version does not support llava-onevision. Skipping.")
 
+try:
+    from transformers import LlavaNextVideoForConditionalGeneration
+
+    model_map["llava_next_video"] = LlavaNextVideoForConditionalGeneration
+except Exception:
+    eval_logger.debug("Transformers version does not support llava-next-video. Skipping.")
+
 
 @register_model("llava_hf")
 class LlavaHf(lmms):
