@@ -553,12 +553,33 @@ class SigLipVisionTower(nn.Module):
         elif getattr(vision_tower_cfg, "unfreeze_mm_vision_tower", False):
             # TODO: better detector is needed.
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
-            self.load_model()
+            self._build_empty_vision_tower_for_checkpoint()
         elif hasattr(vision_tower_cfg, "mm_tunable_parts") and "mm_vision_tower" in vision_tower_cfg.mm_tunable_parts:
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
-            self.load_model()
+            self._build_empty_vision_tower_for_checkpoint()
         else:
             self.cfg_only = self.config
+
+    def _build_empty_vision_tower_for_checkpoint(self):
+        """
+        Build only model structure when running with delayed load.
+        This avoids nested `from_pretrained` under low_cpu_mem_usage/meta init and
+        allows outer checkpoint loading to materialize vision tower weights.
+        Keep architecture consistent with `load_model()` to avoid random-initialized
+        extra parameters (e.g. last encoder layer and vision head) degrading metrics.
+        """
+        try:
+            self.config = SigLipVisionConfig.from_pretrained(self.vision_tower_name, local_files_only=True)
+        except Exception:
+            # Fallback to default config if local files are not available at init time.
+            self.config = SigLipVisionConfig()
+
+        self.vision_tower = SigLipVisionModel(self.config)
+        # Align with `load_model()` so checkpoint key-space matches.
+        del self.vision_tower.vision_model.encoder.layers[-1:]
+        self.vision_tower.vision_model.head = nn.Identity()
+        self.vision_tower.requires_grad_(False)
+        self.is_loaded = True
 
     def load_model(self, device_map=None):
         if self.is_loaded:
