@@ -11,7 +11,7 @@ PRETRAINED="llava-hf/LLaVA-NeXT-Video-7B-hf"
 
 # Model arguments for llava_hf.
 ATTN_IMPLEMENTATION=flash_attention_2
-BASE_MODEL_ARGS="pretrained=$PRETRAINED,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION"
+BASE_MODEL_ARGS="pretrained=$PRETRAINED,attn_implementation=$ATTN_IMPLEMENTATION"
 
 MODEL_ARGS="$BASE_MODEL_ARGS"
 for task in "${TASKS[@]}"; do
