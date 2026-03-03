@@ -29,6 +29,29 @@ from llava.model.llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
 from transformers import Qwen2Config, Qwen2Model, Qwen2ForCausalLM
 # from transformers import Qwen2Config
 #from llava.model.language_model.frame_fu`sion_modelling_qwen import FastVQwen2Model
+
+
+def _normalize_rope_config(config):
+    """
+    Keep RoPE config compatible across transformers versions.
+    Newer releases may read `rope_parameters`, while older checkpoints often only store `rope_scaling`.
+    """
+    rope_parameters = getattr(config, "rope_parameters", None)
+    if rope_parameters is not None:
+        return
+
+    rope_scaling = getattr(config, "rope_scaling", None)
+    if isinstance(rope_scaling, dict):
+        rope_parameters = dict(rope_scaling)
+        if "rope_type" not in rope_parameters and "type" in rope_parameters:
+            rope_parameters["rope_type"] = rope_parameters["type"]
+        rope_parameters.setdefault("rope_type", "default")
+    else:
+        rope_parameters = {"rope_type": "default"}
+
+    setattr(config, "rope_parameters", rope_parameters)
+
+
 class LlavaQwenConfig(Qwen2Config):
     model_type = "llava_qwen"
 
@@ -45,9 +68,10 @@ class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
 
     def __init__(self, config):
         # super(Qwen2ForCausalLM, self).__init__(config)
+        _normalize_rope_config(config)
         Qwen2ForCausalLM.__init__(self, config)
         config.model_type = "llava_qwen"
-        config.rope_scaling = None
+        _normalize_rope_config(config)
 
         self.model = LlavaQwenModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
