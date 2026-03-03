@@ -678,7 +678,7 @@ def make_table(result_dict, column: str = "results", sort_results: bool = False)
     if column == "results":
         throughput = result_dict.get("throughput", {})
         if isinstance(throughput, dict) and throughput:
-            preferred_order = ["total_gen_tokens", "total_elapsed_time", "avg_latency", "avg_speed"]
+            preferred_order = ["total_gen_tokens", "total_elapsed_time", "avg_latency", "avg_speed", "avg_ttft", "avg_tpot", "avg_gene_speed"]
             ordered_keys = preferred_order + sorted([k for k in throughput.keys() if k not in preferred_order])
 
             def get_unit(metric_name: str) -> str:
@@ -689,6 +689,12 @@ def make_table(result_dict, column: str = "results", sort_results: bool = False)
                 if metric_name == "avg_latency":
                     return "seconds/request"
                 if metric_name == "avg_speed":
+                    return "tokens/s"
+                if metric_name == "avg_ttft":
+                    return "ms"
+                if metric_name == "avg_tpot":
+                    return "ms/token"
+                if metric_name == "avg_gene_speed":
                     return "tokens/s"
                 return "varies"
 

@@ -67,7 +67,15 @@ def summarize_logged_metrics() -> Dict[str, Any]:
 
     for key, values in additional_numeric.items():
         if values:
-            summary[f"avg_{key}"] = sum(values) / len(values)
+            if key in {"ttft", "tpot"}:
+                converted_values = [value * 1000.0 for value in values]
+                summary[f"avg_{key}"] = sum(converted_values) / len(converted_values)
+            else:
+                summary[f"avg_{key}"] = sum(values) / len(values)
+
+    avg_tpot = summary.get("avg_tpot")
+    if isinstance(avg_tpot, Number):
+        summary["avg_gene_speed"] = (1000.0 / avg_tpot) if avg_tpot > 0 else 0.0
 
     return summary
 
