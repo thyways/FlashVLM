@@ -15,7 +15,7 @@ MM_SPATIAL_POOL_MODE=bilinear
 ATTN_IMPLEMENTATION=flash_attention_2
 BASE_MODEL_ARGS="pretrained=$PRETRAINED,conv_template=$CONV_TEMPLATE,mm_spatial_pool_mode=$MM_SPATIAL_POOL_MODE,max_frames_num=$MAX_FRAMES_NUM,attn_implementation=$ATTN_IMPLEMENTATION"
 
-MODEL_ARGS="enable_flashvid=False,$BASE_MODEL_ARGS"
+MODEL_ARGS="$BASE_MODEL_ARGS"
 for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     accelerate launch \
