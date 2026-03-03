@@ -3,13 +3,14 @@ from typing import List
 
 from loguru import logger as eval_logger
 from tqdm import tqdm
+from transformers import StoppingCriteriaList
 
 from lmms_eval import utils
 from lmms_eval.api.instance import GenerationResult, Instance, TokenCounts
 from lmms_eval.api.registry import register_model
 from lmms_eval.imports import optional_import
 from lmms_eval.models.model_utils.gen_metrics import log_metrics
-from lmms_eval.models.simple.qwen3_vl import Qwen3_VL as Qwen3_VLSimple
+from lmms_eval.models.simple.qwen3_vl import Qwen3_VL as Qwen3_VLSimple, TTFTStoppingCriteria
 from lmms_eval.protocol import ChatMessages
 
 process_vision_info, _has_qwen_vl = optional_import("qwen_vl_utils", "process_vision_info")
@@ -40,8 +41,12 @@ class Qwen3_VL(Qwen3_VLSimple):
         chunks = re_ords.get_batched(n=self.batch_size, batch_fn=None)
         num_iters = len(requests) // self.batch_size if len(requests) % self.batch_size == 0 else len(requests) // self.batch_size + 1
         pbar = tqdm(total=num_iters, disable=(self.rank != 0), desc="Model Responding")
-        total_elapsed_time = 0
+        total_elapsed_time = 0.0
         total_tokens = 0
+        total_ttft = 0.0
+        ttft_measurements = 0
+        total_decode_time = 0.0
+        total_decode_tokens = 0
         for chunk in chunks:
             ctx, doc_to_messages, all_gen_kwargs, doc_id, task, split = zip(*chunk)
             chat_messages = [doc_to_messages[idx](self.task_dict[task][split][ids]) for idx, (ids, task, split) in enumerate(zip(doc_id, task, split))]
@@ -133,6 +138,7 @@ class Qwen3_VL(Qwen3_VLSimple):
                 current_gen_kwargs["top_k"] = None
 
             start_time = time.time()
+            ttft_stopping_criteria = TTFTStoppingCriteria(start_time=start_time)
             cont = self.model.generate(
                 **inputs,
                 eos_token_id=self.tokenizer.eos_token_id,
@@ -144,6 +150,7 @@ class Qwen3_VL(Qwen3_VLSimple):
                 max_new_tokens=current_gen_kwargs["max_new_tokens"],
                 top_k=current_gen_kwargs.get("top_k", None),
                 use_cache=self.use_cache,
+                stopping_criteria=StoppingCriteriaList([ttft_stopping_criteria]),
             )
             end_time = time.time()
 
@@ -155,8 +162,21 @@ class Qwen3_VL(Qwen3_VLSimple):
             )
 
             # Calculate timing metrics for batch
-            total_elapsed_time += end_time - start_time
-            total_tokens += sum(len(ids) for ids in generated_ids_trimmed)
+            output_token_lengths = [len(ids) for ids in generated_ids_trimmed]
+            total_tokens += sum(output_token_lengths)
+
+            batch_elapsed_time = end_time - start_time
+            batch_ttft = ttft_stopping_criteria.get_ttft(end_time)
+            _, batch_decode_time, batch_decode_tokens = self.compute_tpot(
+                total_elapsed_time=batch_elapsed_time,
+                ttft=batch_ttft,
+                output_token_lengths=output_token_lengths,
+            )
+            total_elapsed_time += batch_elapsed_time
+            total_ttft += batch_ttft
+            ttft_measurements += 1
+            total_decode_time += batch_decode_time
+            total_decode_tokens += batch_decode_tokens
 
             for i, (ans, context) in enumerate(zip(answers, texts)):
                 res.append(GenerationResult(text=ans, token_counts=TokenCounts(output_tokens=len(generated_ids_trimmed[i]))))
@@ -170,12 +190,16 @@ class Qwen3_VL(Qwen3_VLSimple):
 
         # Calculate average speed
         avg_speed = total_tokens / total_elapsed_time if total_elapsed_time > 0 else 0
+        avg_ttft = total_ttft / ttft_measurements if ttft_measurements > 0 else 0.0
+        avg_tpot = total_decode_time / total_decode_tokens if total_decode_tokens > 0 else 0.0
         # Log metrics
         metric_dict = {
             "total_gen_tokens": total_tokens,
             "total_elapsed_time": total_elapsed_time,
             "avg_speed": avg_speed,
             "additional_metrics": {
+                "ttft": avg_ttft,
+                "tpot": avg_tpot,
                 "rank": self.rank,
             },
         }

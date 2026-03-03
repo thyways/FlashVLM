@@ -1,6 +1,7 @@
 import re
 import os
 import sys
+import time
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -16,6 +17,8 @@ from transformers import (
     AutoTokenizer,
     Qwen3VLForConditionalGeneration,
     Qwen3VLMoeForConditionalGeneration,
+    StoppingCriteria,
+    StoppingCriteriaList,
 )
 
 from lmms_eval import utils
@@ -23,10 +26,29 @@ from lmms_eval.api.instance import Instance
 from lmms_eval.api.model import lmms
 from lmms_eval.api.registry import register_model
 from lmms_eval.imports import optional_import
+from lmms_eval.models.model_utils.gen_metrics import log_metrics
 
 process_vision_info, _has_qwen_vl = optional_import("qwen_vl_utils", "process_vision_info")
 if not _has_qwen_vl:
     eval_logger.warning("Failed to import qwen_vl_utils; Please install it via `pip install qwen-vl-utils`")
+
+
+class TTFTStoppingCriteria(StoppingCriteria):
+    """Capture time-to-first-token during generation without altering stop behavior."""
+
+    def __init__(self, start_time: float):
+        super().__init__()
+        self.start_time = start_time
+        self.first_token_time: Optional[float] = None
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        if self.first_token_time is None:
+            self.first_token_time = time.time()
+        return False
+
+    def get_ttft(self, fallback_end_time: float) -> float:
+        first_token_time = self.first_token_time if self.first_token_time is not None else fallback_end_time
+        return max(first_token_time - self.start_time, 0.0)
 
 
 @register_model("qwen3_vl")
@@ -353,8 +375,21 @@ class Qwen3_VL(lmms):
                 new_list.append(j)
         return new_list
 
+    @staticmethod
+    def compute_tpot(total_elapsed_time: float, ttft: float, output_token_lengths: List[int]) -> Tuple[float, float, int]:
+        decode_tokens = sum(max(token_len - 1, 0) for token_len in output_token_lengths)
+        decode_time = max(total_elapsed_time - ttft, 0.0)
+        tpot = decode_time / decode_tokens if decode_tokens > 0 else 0.0
+        return tpot, decode_time, decode_tokens
+
     def generate_until(self, requests: List[Instance]) -> List[str]:
         res = []
+        total_elapsed_time = 0.0
+        total_tokens = 0
+        total_ttft = 0.0
+        ttft_measurements = 0
+        total_decode_time = 0.0
+        total_decode_tokens = 0
 
         def _collate(x):
             # the negative sign on len(toks) sorts descending - this has a few advantages:
@@ -520,6 +555,8 @@ class Qwen3_VL(lmms):
                 current_gen_kwargs["temperature"] = None
                 current_gen_kwargs["top_p"] = None
 
+            start_time = time.time()
+            ttft_stopping_criteria = TTFTStoppingCriteria(start_time=start_time)
             cont = self.model.generate(
                 **inputs,
                 eos_token_id=self.tokenizer.eos_token_id,
@@ -530,7 +567,9 @@ class Qwen3_VL(lmms):
                 num_beams=current_gen_kwargs["num_beams"],
                 max_new_tokens=current_gen_kwargs["max_new_tokens"],
                 use_cache=self.use_cache,
+                stopping_criteria=StoppingCriteriaList([ttft_stopping_criteria]),
             )
+            end_time = time.time()
 
             generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, cont)]
             answers = self.processor.batch_decode(
@@ -538,6 +577,21 @@ class Qwen3_VL(lmms):
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False,
             )
+            output_token_lengths = [len(ids) for ids in generated_ids_trimmed]
+            total_tokens += sum(output_token_lengths)
+
+            batch_elapsed_time = end_time - start_time
+            batch_ttft = ttft_stopping_criteria.get_ttft(end_time)
+            _, batch_decode_time, batch_decode_tokens = self.compute_tpot(
+                total_elapsed_time=batch_elapsed_time,
+                ttft=batch_ttft,
+                output_token_lengths=output_token_lengths,
+            )
+            total_elapsed_time += batch_elapsed_time
+            total_ttft += batch_ttft
+            ttft_measurements += 1
+            total_decode_time += batch_decode_time
+            total_decode_tokens += batch_decode_tokens
             for i, ans in enumerate(answers):
                 for term in until:
                     if len(term) > 0:
@@ -553,6 +607,16 @@ class Qwen3_VL(lmms):
                 # eval_logger.debug(f"Model Response: {ans}")
             # reorder this group of results back to original unsorted form
         res = re_ords.get_original(res)
+
+        avg_speed = total_tokens / total_elapsed_time if total_elapsed_time > 0 else 0.0
+        avg_ttft = total_ttft / ttft_measurements if ttft_measurements > 0 else 0.0
+        avg_tpot = total_decode_time / total_decode_tokens if total_decode_tokens > 0 else 0.0
+        log_metrics(
+            total_elapsed_time=total_elapsed_time,
+            total_gen_tokens=total_tokens,
+            avg_speed=avg_speed,
+            additional_metrics={"ttft": avg_ttft, "tpot": avg_tpot, "rank": self.rank},
+        )
 
         pbar.close()
         return res
