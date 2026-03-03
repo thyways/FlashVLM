@@ -149,7 +149,6 @@ class LlavaVid(lmms):
             overwrite_config["mm_spatial_pool_mode"] = self.mm_spatial_pool_mode
             overwrite_config["mm_pooling_position"] = self.mm_resampler_location
             overwrite_config["mm_newline_position"] = mm_newline_position
-            overwrite_config["delay_load"] = self.delay_load
             # overwrite_config["attn_implementation"] = attn_implementation
 
             if "vicuna" in self.pretrained.lower() or "yi" in self.pretrained.lower():

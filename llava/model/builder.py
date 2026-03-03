@@ -214,12 +214,13 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                         llava_cfg = customized_config
                         if isinstance(llava_cfg, str):
                             llava_cfg = LlavaQwenMoeConfig.from_pretrained(llava_cfg)
-                    llava_cfg.delay_load = True
 
                     if overwrite_config is not None:
                         rank0_print(f"Overwriting config with {overwrite_config}")
                         for k, v in overwrite_config.items():
                             setattr(llava_cfg, k, v)
+                    # Avoid nested vision tower from_pretrained under low_cpu_mem_usage/meta init.
+                    llava_cfg.delay_load = True
 
                     model = LlavaQwenMoeForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, config=llava_cfg, **kwargs)
 
@@ -232,12 +233,13 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                         llava_cfg = customized_config
                         if isinstance(llava_cfg, str):
                             llava_cfg = LlavaQwenConfig.from_pretrained(llava_cfg)
-                    llava_cfg.delay_load = True
 
                     if overwrite_config is not None:
                         rank0_print(f"Overwriting config with {overwrite_config}")
                         for k, v in overwrite_config.items():
                             setattr(llava_cfg, k, v)
+                    # Avoid nested vision tower from_pretrained under low_cpu_mem_usage/meta init.
+                    llava_cfg.delay_load = True
 
                     model = LlavaQwenForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, attn_implementation=attn_implementation, config=llava_cfg, **kwargs)
 

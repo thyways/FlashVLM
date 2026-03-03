@@ -546,16 +546,17 @@ class SigLipVisionTower(nn.Module):
         self.vision_tower_name = vision_tower
 
         self.image_processor = SigLipImageProcessor()
+        has_unfreeze_vision_tower = getattr(vision_tower_cfg, "unfreeze_mm_vision_tower", False)
+        has_mm_tunable_vision_tower = hasattr(vision_tower_cfg, "mm_tunable_parts") and "mm_vision_tower" in vision_tower_cfg.mm_tunable_parts
 
         if not delay_load:
             rank0_print(f"Loading vision tower: {vision_tower}")
             self.load_model()
-        elif getattr(vision_tower_cfg, "unfreeze_mm_vision_tower", False):
-            # TODO: better detector is needed.
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
-            self._build_empty_vision_tower_for_checkpoint()
-        elif hasattr(vision_tower_cfg, "mm_tunable_parts") and "mm_vision_tower" in vision_tower_cfg.mm_tunable_parts:
-            rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
+        elif has_unfreeze_vision_tower or has_mm_tunable_vision_tower:
+            if has_unfreeze_vision_tower:
+                rank0_print("The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
+            else:
+                rank0_print("The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
             self._build_empty_vision_tower_for_checkpoint()
         else:
             self.cfg_only = self.config
