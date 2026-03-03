@@ -62,8 +62,7 @@ All chat backends listed below log throughput-oriented metrics (`total_gen_token
 TTFT/TPOT coverage is narrower:
 
 - **Native TTFT/TPOT in run summary**: `vllm`, `vllm_generate`
-- **Estimator-based TTFT/TPOT in run summary**: `huggingface` (captured from first generated token callback + decode-phase timing)
-- **Throughput-only (no TTFT/TPOT in summary)**: `sglang`, `openai`, `async_openai`, `qwen2_5_vl`, `qwen3_vl`, `llava_hf`, `internvl_hf`, `llava_onevision1_5`, `thyme`
+- **Throughput-only (no native TTFT/TPOT in summary)**: `sglang`, `openai`, `async_openai`, `huggingface`, `qwen2_5_vl`, `qwen3_vl`, `llava_hf`, `internvl_hf`, `llava_onevision1_5`, `thyme`
 
 ## Usage
 
@@ -88,8 +87,7 @@ python -m lmms_eval \
 
 ### TTFT Calculation
 - **Available from model runtime**: Uses actual first-token timing when backend exposes it (currently vLLM paths)
-- **Estimator path (HuggingFace backend)**: Captures first generated token time via stopping criteria callback during `model.generate()`
-- **Unavailable case**: Backends without first-token timing or callback instrumentation expose throughput metrics only
+- **Unavailable case**: Backends without first-token timing expose throughput metrics only
 
 ### TPOT Calculation  
 - **Native formula**: `(E2E_latency - TTFT) / (output_tokens - 1)` when TTFT and token-level timings are available
@@ -122,7 +120,7 @@ python -m lmms_eval \
 - Verify model implementation includes timing instrumentation
 
 ### Incomplete Metrics
-- TTFT/TPOT is backend-dependent (runtime-native on vLLM, estimator-based on `huggingface`)
+- TTFT is backend-dependent and may be unavailable for non-vLLM paths
 - Batch metrics average across multiple outputs, so individual request variance is not captured
 - API-backed latency includes network overhead
 

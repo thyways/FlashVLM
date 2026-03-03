@@ -212,7 +212,7 @@ With `--log_samples`, v0.7 emits per-sample and run-level efficiency data:
 - Run-level: `total_gen_tokens`, `total_elapsed_time`, `avg_speed`
 - Aggregated: `efficiency.overall.tokens_per_correct_answer`, `efficiency.overall.avg_output_tokens_per_sample`, per-task breakdown
 
-TTFT/TPOT are runtime-native on `vllm` backends. `huggingface` backend reports estimator-based TTFT/TPOT; other backends report wall-clock throughput only.
+TTFT/TPOT available on `vllm` backends only. Other backends report wall-clock throughput.
 
 ## Where to Edit (By Intent)
 

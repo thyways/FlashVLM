@@ -17,8 +17,6 @@ from transformers import (
     AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
-    StoppingCriteria,
-    StoppingCriteriaList,
 )
 
 from lmms_eval import utils
@@ -182,16 +180,6 @@ class Huggingface(lmms):
                 new_list.append(j)
         return new_list
 
-    class _FirstTokenTimer(StoppingCriteria):
-        def __init__(self, prompt_length: int):
-            self.prompt_length = prompt_length
-            self.first_token_time: Optional[float] = None
-
-        def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-            if self.first_token_time is None and input_ids.shape[1] > self.prompt_length:
-                self.first_token_time = time.time()
-            return False
-
     def generate_until(self, requests: List[Instance]) -> List[GenerationResult]:
         res = []
 
@@ -213,10 +201,6 @@ class Huggingface(lmms):
         pbar = tqdm(total=num_iters, disable=(self.rank != 0), desc="Model Responding")
         total_elapsed_time = 0
         total_tokens = 0
-        total_requests_with_output = 0
-        total_ttft = 0.0
-        total_decode_time_after_first_token = 0.0
-        total_tokens_after_first = 0
         for chunk in chunks:
             ctx, doc_to_messages, all_gen_kwargs, doc_id, task, split = zip(*chunk)
             chat_messages = [doc_to_messages[0](self.task_dict[task][split][ids]) for ids, task, split in zip(doc_id, task, split)]
@@ -273,17 +257,6 @@ class Huggingface(lmms):
                 current_gen_kwargs["temperature"] = None
                 current_gen_kwargs["top_p"] = None
 
-            first_token_timer = self._FirstTokenTimer(prompt_length=inputs.input_ids.shape[1])
-            user_stopping_criteria = current_gen_kwargs.get("stopping_criteria")
-            if user_stopping_criteria is None:
-                stopping_criteria = StoppingCriteriaList([first_token_timer])
-            elif isinstance(user_stopping_criteria, StoppingCriteriaList):
-                stopping_criteria = StoppingCriteriaList(list(user_stopping_criteria) + [first_token_timer])
-            elif isinstance(user_stopping_criteria, list):
-                stopping_criteria = StoppingCriteriaList(user_stopping_criteria + [first_token_timer])
-            else:
-                stopping_criteria = StoppingCriteriaList([user_stopping_criteria, first_token_timer])
-
             start_time = time.time()
             cont = self.model.generate(
                 **inputs,
@@ -295,7 +268,6 @@ class Huggingface(lmms):
                 num_beams=current_gen_kwargs["num_beams"],
                 max_new_tokens=current_gen_kwargs["max_new_tokens"],
                 use_cache=self.use_cache,
-                stopping_criteria=stopping_criteria,
             )
             end_time = time.time()
 
@@ -307,21 +279,8 @@ class Huggingface(lmms):
             )
 
             # Calculate timing metrics for batch
-            batch_elapsed_time = end_time - start_time
-            batch_tokens = sum(len(ids) for ids in generated_ids_trimmed)
-            batch_requests_with_output = sum(1 for ids in generated_ids_trimmed if len(ids) > 0)
-            batch_ttft = batch_elapsed_time
-            if first_token_timer.first_token_time is not None:
-                batch_ttft = max(first_token_timer.first_token_time - start_time, 0.0)
-            batch_decode_time_after_first_token = max(batch_elapsed_time - batch_ttft, 0.0)
-            batch_tokens_after_first = sum(max(len(ids) - 1, 0) for ids in generated_ids_trimmed)
-
-            total_elapsed_time += batch_elapsed_time
-            total_tokens += batch_tokens
-            total_requests_with_output += batch_requests_with_output
-            total_ttft += batch_ttft * batch_requests_with_output
-            total_decode_time_after_first_token += batch_decode_time_after_first_token
-            total_tokens_after_first += batch_tokens_after_first
+            total_elapsed_time += end_time - start_time
+            total_tokens += sum(len(ids) for ids in generated_ids_trimmed)
 
             for i, (ans, context) in enumerate(zip(answers, texts)):
                 res.append(GenerationResult(text=ans, token_counts=TokenCounts(output_tokens=len(generated_ids_trimmed[i]))))
@@ -334,18 +293,11 @@ class Huggingface(lmms):
         res = re_ords.get_original(res)
         # Calculate average speed
         avg_speed = total_tokens / total_elapsed_time if total_elapsed_time > 0 else 0
-        avg_ttft = total_ttft / total_requests_with_output if total_requests_with_output > 0 else 0.0
-        avg_tpot = total_decode_time_after_first_token / total_tokens_after_first if total_tokens_after_first > 0 else 0.0
         # Log metrics
         metric_dict = {
             "total_gen_tokens": total_tokens,
             "total_elapsed_time": total_elapsed_time,
             "avg_speed": avg_speed,
-            "additional_metrics": {
-                "ttft": avg_ttft,
-                "tpot": avg_tpot,
-                "rank": self.rank,
-            },
         }
         log_metrics(**metric_dict)
 
