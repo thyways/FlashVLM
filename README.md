@@ -5,7 +5,7 @@
 1. [Installation](#installation)
 2. [Environment Profiles](#environment-profiles)
 3. [Quickstart](#quickstart)
-5. [Notes](#notes)
+4. [Notes](#notes)
 
 ## 📦Installation
 

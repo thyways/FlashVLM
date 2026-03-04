@@ -23,6 +23,9 @@ llava = [
     "flashvlm-llava",
 ]
 
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
+
 [tool.uv.sources]
 flashvlm-llava = { path = "./llava", editable = true }
 
