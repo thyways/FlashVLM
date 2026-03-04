@@ -32,6 +32,8 @@ Create and install the `qwen` environment:
 ```bash
 uv pip install -e . --group "qwen"
 uv pip install flash-attn --no-build-isolation
+cd lmms-eval
+uv pip install -e .
 ```
 
 Create and install the `llava` environment:
@@ -39,6 +41,8 @@ Create and install the `llava` environment:
 ```bash
 uv pip install -e . --group "llava"
 uv pip install flash-attn --no-build-isolation
+cd lmms-eval
+uv pip install -e .
 ```
 
 ## 📝Notes
