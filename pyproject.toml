@@ -10,7 +10,7 @@ dependencies = []
 base = [
     "torch==2.9.*",
     "ninja",
-    "lmms-eval==0.7.0",
+    "lmms-eval>=0.7.0",
 ]
 qwen = [
     { include-group = "base" },
