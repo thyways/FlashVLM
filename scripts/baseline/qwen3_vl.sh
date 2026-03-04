@@ -1,7 +1,6 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export HF_HOME="${HOME}/.cache/huggingface"
-export HF_HUB_OFFLINE=1
 
 # Evaluation benchmarks.("videomme" "egoschema" "mvbench" "longvideobench_val_v" "mlvu_test")
 TASKS=("videomme")
