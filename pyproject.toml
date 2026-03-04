@@ -19,12 +19,10 @@ qwen = [
 llava = [
     { include-group = "base" },
     "transformers==4.57.3",
-    "flashvlm-llava",
 ]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
-flashvlm-llava = { path = "./llava", editable = true }
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
@@ -34,3 +32,6 @@ explicit = true
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["method*", "llava*"]

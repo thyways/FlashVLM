@@ -24,25 +24,24 @@ Two optional Python environments are defined in `pyproject.toml`:
   - `transformers==5.2.0`
 - `llava`:
   - `transformers==4.57.3`
-  - local editable package `./llava` (published as `flashvlm-llava`)
 
 ## 🚀Quickstart
 
 Create and install the `qwen` environment:
 
 ```bash
-uv venv ".venv-qwen" --python "3.12"
-uv pip install --python ".venv-qwen/bin/python" --group "qwen"
+uv pip install -e . --group "qwen"
+uv pip install flash-attn --no-build-isolation
 ```
 
 Create and install the `llava` environment:
 
 ```bash
-uv venv ".venv-llava" --python "3.12"
-uv pip install --python ".venv-llava/bin/python" --group "llava"
+uv pip install -e . --group "llava"
+uv pip install flash-attn --no-build-isolation
 ```
 
 ## 📝Notes
 
 - `qwen` and `llava` are isolated environments with different `transformers` versions.
-- `./llava/pyproject.toml` is used so the local `llava` code can be installed in the `llava` environment.
+- `llava` package is now discovered and packaged directly from the root `pyproject.toml`.
