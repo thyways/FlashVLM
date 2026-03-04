@@ -10,7 +10,6 @@ dependencies = []
 base = [
     "torch==2.9.*",
     "ninja",
-    "flash-attn==2.8.3",
     "lmms-eval==0.7.0",
 ]
 qwen = [
@@ -23,9 +22,6 @@ llava = [
     "flashvlm-llava",
 ]
 
-[tool.uv]
-no-build-isolation-package = ["flash-attn"]
-
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
 flashvlm-llava = { path = "./llava", editable = true }
@@ -34,9 +30,6 @@ flashvlm-llava = { path = "./llava", editable = true }
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
-
-[tool.uv.extra-build-dependencies]
-flash-attn = ["torch", "ninja"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
