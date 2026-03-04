@@ -3,10 +3,31 @@ name = "flashvlm"
 version = "0.1.0"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
-dependencies = [
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+base = [
+    "torch==2.9.*",
+    "ninja",
+    "flash-attn==2.8.3",
+    "lmms-eval==0.7.0",
+]
+qwen = [
+    { include-group = "base" },
     "transformers==5.2.0",
 ]
+llava = [
+    { include-group = "base" },
+    "transformers==4.57.3",
+    "flashvlm-llava",
+]
+
+[tool.uv.sources]
+flashvlm-llava = { path = "./llava", editable = true }
+
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch", "ninja"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

@@ -1,0 +1,14 @@
+[project]
+name = "flashvlm-llava"
+version = "0.1.0"
+description = "Local LLaVA package for FlashVLM."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["llava", "llava.model"]
+package-dir = { llava = "." }
