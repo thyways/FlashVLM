@@ -8,11 +8,9 @@ version = "0.1.0"
 description = "FlashVLM methods and evaluation environment"
 requires-python = ">=3.10"
 dependencies = [
-    "torch==2.9.0",
-    "lmms-eval==0.7.0",
+    "torch==2.8.*",
     "decord",
     "qwen-vl-utils>=0.0.14",
-    "requests",
 ]
 
 [project.optional-dependencies]

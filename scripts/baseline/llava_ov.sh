@@ -1,5 +1,5 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export HF_HOME="${HOME}/.cache/huggingface"
 
 # Evaluation benchmarks.
@@ -20,7 +20,7 @@ for task in "${TASKS[@]}"; do
     echo "Evaluating task: $task"
     accelerate launch \
         --main_process_port 18888 \
-        --num_processes 4 \
+        --num_processes 8 \
         -m lmms_eval \
         --model llava_onevision \
         --model_args $MODEL_ARGS \

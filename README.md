@@ -67,12 +67,12 @@ cd FlashVLM
 2. Create and activate a virtual environment:
 uv：
 ```bash
-uv venv --python 3.12 --seed --managed-python
+uv venv --python 3.13 --seed --managed-python
 source .venv/bin/activate
 ```
 conda：
 ```bash
-conda create -n flashvlm python==3.12
+conda create -n flashvlm python==3.13
 conda activate flashvlm
 pip install uv
 ```
@@ -83,12 +83,18 @@ pip install uv
 
 ```bash
 uv pip install -e ".[qwen]"
+cd lmms-eval
+uv pip install -e ".[all]"
+uv pip install flash-attn --no-build-isolation
 ```
 
 - LLaVA setup (`transformers==4.57.3`)
 
 ```bash
 uv pip install -e ".[llava]"
+cd lmms-eval
+uv pip install -e ".[all]"
+uv pip install flash-attn --no-build-isolation
 ```
 
 ## 🚀Quickstart
